@@ -23,6 +23,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
 
   TransportRequest? _request;
   bool _loading = false;
+  bool _taking = false;
   String? _error;
 
   @override
@@ -72,6 +73,35 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  /// «Взять в работу»: POST /requests/take, после успеха перезагружаем
+  /// карточку (статус, исполнитель, дата взятия). Отказ сервера (400)
+  /// показываем текстом из {"error": …}.
+  Future<void> _takeRequest() async {
+    final request = _request;
+    if (request == null || _taking) return;
+    setState(() => _taking = true);
+    try {
+      await _api.takeRequest(request.number);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Заявка взята в работу'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      await _load();
+    } on UnauthorizedException {
+      await _logout();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), duration: const Duration(seconds: 4)),
+      );
+    } finally {
+      if (mounted) setState(() => _taking = false);
+    }
   }
 
   @override
@@ -216,12 +246,17 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _disabledAction('ВЗЯТЬ В РАБОТУ'),
+          _buildTakeButton(),
           const SizedBox(height: 12),
+          // Пока на сервере нет POST /requests/complete — кнопка отключена.
+          //
+          // TODO: когда сервер обновится — включить onPressed и вызвать
+          // ApiService.completeRequest(request.number, photoBase64)
+          // (фото через image_picker, base64).
           _disabledAction('ВЫПОЛНЕНО'),
           const SizedBox(height: 8),
           Text(
-            'Появится после обновления сервера',
+            '«Выполнено» появится после обновления сервера',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -233,13 +268,31 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     );
   }
 
-  /// Кнопка действия карточки. Пока на сервере нет POST-эндпоинтов
-  /// (/requests/take, /requests/complete), кнопка отключена (onPressed: null,
-  /// серая), а тап показывает SnackBar «Операция пока недоступна».
-  ///
-  /// TODO: когда сервер обновится — включить onPressed и вызвать
-  /// ApiService.takeRequest(request.number) /
-  /// ApiService.completeRequest(request.number, photoBase64).
+  /// Кнопка «Взять в работу» — активна, вызывает POST /requests/take.
+  Widget _buildTakeButton() {
+    return ElevatedButton(
+      onPressed: _taking ? null : _takeRequest,
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size.fromHeight(56),
+        textStyle: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
+        ),
+      ),
+      child: _taking
+          ? const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            )
+          : const Text('ВЗЯТЬ В РАБОТУ'),
+    );
+  }
+
+  /// Отключённая кнопка действия (серая, onPressed: null), тап показывает
+  /// SnackBar «Операция пока недоступна». Используется для «ВЫПОЛНЕНО»,
+  /// пока на сервере нет POST /requests/complete.
   Widget _disabledAction(String label) {
     return GestureDetector(
       onTap: _showUnavailableSnack,
