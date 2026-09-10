@@ -10,6 +10,7 @@ class TransportRequest {
     required this.item,
     required this.kkm,
     required this.quantity,
+    required this.subdivision,
     required this.from,
     required this.to,
     required this.requiresPhoto,
@@ -29,6 +30,7 @@ class TransportRequest {
         item: _string(json['Изделие']),
         kkm: _string(json['ККМ']),
         quantity: _int(json['Количество']),
+        subdivision: _string(json['Подразделение']),
         from: _string(json['Откуда']),
         to: _string(json['Куда']),
         requiresPhoto: _bool(json['ТребуетсяФото']),
@@ -56,6 +58,10 @@ class TransportRequest {
 
   /// «Количество», шт.
   final int quantity;
+
+  /// «Подразделение» — цех/участок-инициатор заявки. Может отсутствовать
+  /// в ответе сервера (поле добавляется в API) — тогда пустая строка.
+  final String subdivision;
 
   /// «Откуда» — место погрузки.
   final String from;

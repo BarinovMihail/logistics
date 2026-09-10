@@ -126,6 +126,12 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
             children: [
               _Field(label: 'Изделие', value: request.item, emphasized: true),
               _Field(label: 'ККМ', value: request.kkm),
+              _Field(
+                label: 'Подразделение',
+                value: request.subdivision.isEmpty
+                    ? '—'
+                    : request.subdivision,
+              ),
               _Field(label: 'Количество', value: '${request.quantity} шт'),
             ],
           ),

@@ -36,6 +36,7 @@ Future<void> main(List<String> args) async {
   for (final r in requests) {
     print('  №${r.number} [${r.status}] ${r.item} — ${r.quantity} шт, '
         '${r.fromDisplay} -> ${r.toDisplay}, '
+        'подразделение=${r.subdivision.isEmpty ? '—' : r.subdivision}, '
         'фото=${r.requiresPhoto}, мастер=${r.requiresMaster}, '
         'дата=${formatDate(r.date)}');
   }

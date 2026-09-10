@@ -40,6 +40,14 @@ class RequestCard extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text('ККМ: ${request.kkm}', style: theme.textTheme.bodyLarge),
+              // Подразделение показываем только когда оно заполнено в 1С.
+              if (request.subdivision.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '🏢 ${request.subdivision}',
+                  style: theme.textTheme.bodyLarge,
+                ),
+              ],
               const SizedBox(height: 6),
               Text(
                 '📍 ${request.fromDisplay}  →  📍 ${request.toDisplay}',
