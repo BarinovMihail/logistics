@@ -93,6 +93,12 @@ class TransportRequest {
   /// «Куда» для отображения: пустое значение показываем как «—».
   String get toDisplay => to.isEmpty ? '—' : to;
 
+  /// Заявка взята в работу исполнителем (доступно «Выполнено»).
+  bool get isInWork => status == 'В работе';
+
+  /// Выполнена исполнителем, ждёт подтверждения мастера.
+  bool get isWaitingMaster => status == 'Ожидает подтверждения мастера';
+
   // --- Безопасное чтение значений из JSON 1С ---
 
   static String _string(dynamic value) => value?.toString().trim() ?? '';

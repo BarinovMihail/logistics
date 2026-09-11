@@ -24,6 +24,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   TransportRequest? _request;
   bool _loading = false;
   bool _taking = false;
+  bool _completing = false;
   String? _error;
 
   @override
@@ -66,13 +67,33 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     );
   }
 
-  void _showUnavailableSnack() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Операция пока недоступна'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+  /// «Выполнено»: POST /requests/complete. Сервер переводит заявку
+  /// в «Ожидает подтверждения мастера» (или сразу «Завершена») и создаёт
+  /// задачу мастеру; отказ показываем текстом из {"error": …}.
+  Future<void> _completeRequest() async {
+    final request = _request;
+    if (request == null || _completing) return;
+    setState(() => _completing = true);
+    try {
+      await _api.completeRequest(request.number);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Заявка выполнена'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      await _load();
+    } on UnauthorizedException {
+      await _logout();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), duration: const Duration(seconds: 4)),
+      );
+    } finally {
+      if (mounted) setState(() => _completing = false);
+    }
   }
 
   /// «Взять в работу»: POST /requests/take, после успеха перезагружаем
@@ -240,38 +261,33 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       );
 
   Widget _buildButtons() {
+    final request = _request;
+    if (request == null) return const SizedBox.shrink();
+
+    // Доступность по статусу (сервер дополнительно проверяет сам):
+    //  • «Взять в работу» — пока заявка не в работе и не ждёт мастера;
+    //  • «Выполнено» — только когда заявка в работе.
+    final canTake = !request.isInWork && !request.isWaitingMaster;
+    final canComplete = request.isInWork;
+
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildTakeButton(),
+          _buildTakeButton(enabled: canTake),
           const SizedBox(height: 12),
-          // Пока на сервере нет POST /requests/complete — кнопка отключена.
-          //
-          // TODO: когда сервер обновится — включить onPressed и вызвать
-          // ApiService.completeRequest(request.number, photoBase64)
-          // (фото через image_picker, base64).
-          _disabledAction('ВЫПОЛНЕНО'),
-          const SizedBox(height: 8),
-          Text(
-            '«Выполнено» появится после обновления сервера',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 13,
-            ),
-          ),
+          _buildCompleteButton(enabled: canComplete),
         ],
       ),
     );
   }
 
-  /// Кнопка «Взять в работу» — активна, вызывает POST /requests/take.
-  Widget _buildTakeButton() {
+  /// Кнопка «Взять в работу» — POST /requests/take.
+  Widget _buildTakeButton({required bool enabled}) {
     return ElevatedButton(
-      onPressed: _taking ? null : _takeRequest,
+      onPressed: !_taking && enabled ? _takeRequest : null,
       style: ElevatedButton.styleFrom(
         minimumSize: const Size.fromHeight(56),
         textStyle: const TextStyle(
@@ -290,24 +306,25 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     );
   }
 
-  /// Отключённая кнопка действия (серая, onPressed: null), тап показывает
-  /// SnackBar «Операция пока недоступна». Используется для «ВЫПОЛНЕНО»,
-  /// пока на сервере нет POST /requests/complete.
-  Widget _disabledAction(String label) {
-    return GestureDetector(
-      onTap: _showUnavailableSnack,
-      child: ElevatedButton(
-        onPressed: null,
-        style: ElevatedButton.styleFrom(
-          minimumSize: const Size.fromHeight(56),
-          textStyle: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
-          ),
+  /// Кнопка «Выполнено» — POST /requests/complete.
+  Widget _buildCompleteButton({required bool enabled}) {
+    return ElevatedButton(
+      onPressed: !_completing && enabled ? _completeRequest : null,
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size.fromHeight(56),
+        textStyle: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
         ),
-        child: Text(label),
       ),
+      child: _completing
+          ? const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            )
+          : const Text('ВЫПОЛНЕНО'),
     );
   }
 }
