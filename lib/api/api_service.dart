@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -69,6 +70,24 @@ class ApiService {
   /// 400 с текстом ошибки в {"error": "…"} — он попадёт в ApiException.
   Future<void> takeRequest(String num) async {
     await _postJson('/requests/take', {'num': num});
+  }
+
+  /// POST /requests/photo?num=… — загрузить фото выполнения заявки.
+  /// Тело запроса — двоичные данные изображения (Content-Type image/jpeg),
+  /// номер заявки — query-параметр num. Сервер сохраняет фото как
+  /// присоединённый файл заявки и отвечает именем файла (JSON {"data": …}).
+  Future<String> uploadPhoto(String num, Uint8List bytes,
+      {String mimeType = 'image/jpeg'}) async {
+    final response = await _send(
+      (uri, headers) => http.post(
+        uri.replace(queryParameters: {'num': num}),
+        headers: {...headers, 'Content-Type': mimeType},
+        body: bytes,
+      ),
+      '/requests/photo',
+    );
+    final data = _decode(response);
+    return data?.toString() ?? '';
   }
 
   /// POST /requests/complete — выполнить заявку.

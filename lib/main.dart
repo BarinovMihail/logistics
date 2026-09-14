@@ -8,7 +8,7 @@ void main() {
   runApp(const LogisticsApp());
 }
 
-/// Приложение «Перевозки завода» — мобильный клиент рабочих-перевозчиков.
+/// Приложение «Внутризаводская перевозка» — мобильный клиент рабочих-перевозчиков.
 ///
 /// Данные берёт из HTTP-сервиса опубликованной базы 1С:ERP (только чтение,
 /// GET). Тёмная/светлая тема — по системной, Material 3.
@@ -19,7 +19,7 @@ class LogisticsApp extends StatelessWidget {
   Widget build(BuildContext context) {
     const seedColor = Color(0xFF1565C0);
     return MaterialApp(
-      title: 'Перевозки завода',
+      title: 'Внутризаводская перевозка',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../api/api_exceptions.dart';
 import '../api/api_service.dart';
@@ -20,6 +21,7 @@ class RequestDetailScreen extends StatefulWidget {
 
 class _RequestDetailScreenState extends State<RequestDetailScreen> {
   final ApiService _api = ApiService();
+  final ImagePicker _picker = ImagePicker();
 
   TransportRequest? _request;
   bool _loading = false;
@@ -70,11 +72,27 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   /// «Выполнено»: POST /requests/complete. Сервер переводит заявку
   /// в «Ожидает подтверждения мастера» (или сразу «Завершена») и создаёт
   /// задачу мастеру; отказ показываем текстом из {"error": …}.
+  /// Если у заявки стоит «ТребуетсяФото» — сначала камера и загрузка снимка
+  /// (POST /requests/photo), отмена съёмки отменяет выполнение.
   Future<void> _completeRequest() async {
     final request = _request;
     if (request == null || _completing) return;
     setState(() => _completing = true);
     try {
+      if (request.requiresPhoto) {
+        final photo = await _picker.pickImage(
+          source: ImageSource.camera,
+          maxWidth: 1920,
+          maxHeight: 1920,
+          imageQuality: 85,
+        );
+        if (photo == null) {
+          return; // съёмка отменена — заявку не выполняем
+        }
+        final bytes = await photo.readAsBytes();
+        await _api.uploadPhoto(request.number, bytes);
+      }
+
       await _api.completeRequest(request.number);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -279,6 +297,17 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
           _buildTakeButton(enabled: canTake),
           const SizedBox(height: 12),
           _buildCompleteButton(enabled: canComplete),
+          if (canComplete && request.requiresPhoto) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Перед выполнением нужно сфотографировать груз',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -90,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Перевозки завода',
+                    'Внутризаводская перевозка',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.headlineMedium
                         ?.copyWith(fontWeight: FontWeight.w700),

@@ -39,6 +39,8 @@ dependencies:
   http: ^1.2.0
   # Хранение логина/пароля пользователя 1С между запусками.
   shared_preferences: ^2.2.0
+  # Съёмка фото выполнения заявки (если требуется фото).
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
