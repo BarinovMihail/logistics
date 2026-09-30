@@ -189,35 +189,38 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
       children: [
         _SectionCard(
-          title: 'Груз',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Field(label: 'Изделие', value: request.item, emphasized: true),
-              _Field(label: 'ККМ', value: request.kkm),
-              _Field(
-                label: 'Подразделение',
-                value: request.subdivision.isEmpty
-                    ? '—'
-                    : request.subdivision,
-              ),
-              _Field(label: 'Количество', value: '${request.quantity} шт'),
-            ],
+          title: 'Подразделение',
+          child: Text(
+            request.subdivision.isEmpty ? '—' : request.subdivision,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
           ),
         ),
         _SectionCard(
-          title: 'Маршрут',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _RoutePoint(place: request.fromDisplay),
-              const Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: Icon(Icons.south, color: Colors.grey),
-              ),
-              _RoutePoint(place: request.toDisplay),
-            ],
-          ),
+          title: 'Операции',
+          child: request.operations.isEmpty
+              ? Text(
+                  'В заявке нет операций',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < request.operations.length; i++) ...[
+                      if (i > 0) const Divider(height: 32),
+                      _OperationView(
+                        operation: request.operations[i],
+                        // Номер строки из 1С, с fallback на порядковый.
+                        number: request.operations.length > 1
+                            ? (request.operations[i].lineNumber > 0
+                                ? request.operations[i].lineNumber
+                                : i + 1)
+                            : null,
+                      ),
+                    ],
+                  ],
+                ),
         ),
         if (request.specialConditions != null)
           _SectionCard(
@@ -261,6 +264,16 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
           'Исполнитель: ${request.executor ?? '—'}',
           style: _footerStyle(context),
         ),
+        if (request.requiresMaster) ...[
+          Text(
+            'Мастер: ${request.master.isEmpty ? '—' : request.master}',
+            style: _footerStyle(context),
+          ),
+          Text(
+            'Подтверждено мастером: ${request.confirmedByMaster ? 'да' : 'нет'}',
+            style: _footerStyle(context),
+          ),
+        ],
         Text(
           'Взята в работу: ${formatDate(request.takenAt)}',
           style: _footerStyle(context),
@@ -431,9 +444,83 @@ class _Field extends StatelessWidget {
   }
 }
 
+/// Одна операция заявки: груз (номенклатура, ККМ, количество),
+/// технологическая операция, маршрут и документы-основания (ПЗ,
+/// маршрутный лист). [number] — номер, показывается когда операций несколько.
+class _OperationView extends StatelessWidget {
+  const _OperationView({required this.operation, this.number});
+
+  final RequestOperation operation;
+  final int? number;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final smallStyle = TextStyle(
+      fontSize: 13,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (number != null) ...[
+          Text(
+            'ОПЕРАЦИЯ $number',
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.primary,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        _Field(
+          label: 'Номенклатура',
+          value: operation.item.isEmpty ? '—' : operation.item,
+          emphasized: true,
+        ),
+        _Field(label: 'Количество', value: '${operation.quantity} шт'),
+        _Field(
+          label: 'ККМ',
+          value: operation.kkm.isEmpty ? '—' : operation.kkm,
+        ),
+        if (operation.techOperation.isNotEmpty)
+          _Field(
+            label: 'Технологическая операция',
+            value: operation.techOperation,
+          ),
+        const SizedBox(height: 4),
+        _RoutePoint(place: operation.fromDisplay),
+        const Padding(
+          padding: EdgeInsets.only(left: 4),
+          child: Icon(Icons.south, color: Colors.grey),
+        ),
+        _RoutePoint(place: operation.toDisplay),
+        const SizedBox(height: 8),
+        if (operation.productionOrder.isNotEmpty)
+          Text('ПЗ: ${operation.productionOrder}', style: smallStyle),
+        if (operation.routeSheet.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text('Маршрутный лист: ${operation.routeSheet}',
+                style: smallStyle),
+          ),
+        if (operation.operationNumber > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              'Операции техпроцесса: ${operation.operationNumber}'
+              '${operation.nextOperationNumber > 0 ? ' → ${operation.nextOperationNumber}' : ''}',
+              style: smallStyle,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// Пункт маршрута («Откуда» / «Куда»).
-class _RoutePoint extends StatelessWidget {
-  const _RoutePoint({required this.place});
+class _RoutePoint extends StatelessWidget {  const _RoutePoint({required this.place});
 
   final String place;
 

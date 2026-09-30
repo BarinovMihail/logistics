@@ -34,8 +34,9 @@ Future<void> main(List<String> args) async {
   final requests = rows.map(TransportRequest.fromJson).toList();
   print('Загружено заявок: ${requests.length}');
   for (final r in requests) {
-    print('  №${r.number} [${r.status}] ${r.item} — ${r.quantity} шт, '
-        '${r.fromDisplay} -> ${r.toDisplay}, '
+    print('  №${r.number} [${r.status}] операций: ${r.operationsCount}, '
+        'всего ${r.totalQuantity} шт, '
+        'транспорт=${r.transport.isEmpty ? 'не указан' : r.transport}, '
         'подразделение=${r.subdivision.isEmpty ? '—' : r.subdivision}, '
         'фото=${r.requiresPhoto}, мастер=${r.requiresMaster}, '
         'дата=${formatDate(r.date)}');
@@ -49,8 +50,21 @@ Future<void> main(List<String> args) async {
   print('HTTP ${detailResponse.statusCode}');
   final detailJson = jsonDecode(utf8.decode(detailResponse.bodyBytes));
   final detail = TransportRequest.fromJson(detailJson['data']);
+  print('  Подразделение: ${detail.subdivision.isEmpty ? '—' : detail.subdivision}');
   print('  ОсобыеУсловия: ${detail.specialConditions ?? '—'}');
   print('  Исполнитель: ${detail.executor ?? '—'}');
+  print('  Мастер: ${detail.master.isEmpty ? '—' : detail.master}, '
+      'подтверждено: ${detail.confirmedByMaster ? 'да' : 'нет'}');
+  print('  Операций: ${detail.operations.length}');
+  for (final op in detail.operations) {
+    print('    ${op.lineNumber}. ${op.item} — ${op.quantity} шт, '
+        'ККМ: ${op.kkm.isEmpty ? '—' : op.kkm}, '
+        '${op.fromDisplay} -> ${op.toDisplay}');
+    print('       тех: ${op.techOperation.isEmpty ? '—' : op.techOperation}');
+    print('       ПЗ: ${op.productionOrder.isEmpty ? '—' : op.productionOrder}');
+    print('       МЛ: ${op.routeSheet.isEmpty ? '—' : op.routeSheet}, '
+        'оп. ${op.operationNumber} -> ${op.nextOperationNumber}');
+  }
   print('  Взята в работу: ${formatDate(detail.takenAt)}');
   print('  Выполнена: ${formatDate(detail.completedAt)}');
 }

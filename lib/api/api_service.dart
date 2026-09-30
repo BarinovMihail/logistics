@@ -13,27 +13,35 @@ import 'auth_storage.dart';
 class ApiService {
   /// Адреса HTTP-сервиса 1С — единственное место в проекте, где задан сервер.
   ///
-  /// [apiBaseUrl] — прямой адрес компьютера с опубликованной базой в заводской
-  /// сети (как localUrl в проекте TSD). Работает, когда телефон в сети,
-  /// имеющей маршрут до 192.168.x.x (заводской Wi-Fi, если ИТ его откроет).
+  /// Приоритет подключения (как в проекте «Регистрация нарушений»):
+  /// **мобильная сеть → Wi-Fi → USB**. Клиент перебирает адреса по порядку
+  /// при сетевых ошибках и запоминает последний удачный (см. [_send] и
+  /// [_preferredHost]); HTTP-ответы сервера (401/404/400…) переключение
+  /// не вызывают.
   ///
-  /// [apiFallbackUrl] — резерв через USB-кабель: localhost:8080 на телефоне
-  /// пробрасывается на этот компьютер командой (слетает при переподключении
-  /// кабеля — повторить; порт 80 на самом телефоне adbd занять не может —
-  /// привилегированный):
-  ///
-  ///   adb reverse tcp:8080 tcp:80
-  ///
-  /// Путь к базе — в нижнем регистре: Apache публикует её как /erp_local,
-  /// и запрос с «ERP_Local» получает 301-редирект, после которого POST
-  /// превращается в GET.
-  ///
-  /// Клиент перебирает адреса по порядку при сетевых ошибках (см. [_send]
-  /// и [_preferredHost]) — как failover в DioClient проекта TSD.
+  /// [apiMobileUrl] — публичный адрес этой же базы (ERP_Local на этом ПК)
+  /// из интернета: порт 8182 на роутере завода проброшен на 192.168.1.51:80.
+  /// Работает только из мобильной сети: из заводской сети внешний адрес
+  /// недоступен (нет hairpin NAT) — клиент молча перейдёт на Wi-Fi/USB.
+  static const String apiMobileUrl =
+      'http://81.211.118.58:8182/erp_local/hs/log';
+
+  /// [apiBaseUrl] — прямой адрес компьютера с базой в заводской сети
+  /// (Wi-Fi/LAN, когда есть маршрут до 192.168.x.x).
   static const String apiBaseUrl = 'http://192.168.1.51/erp_local/hs/log';
+
+  /// [apiFallbackUrl] — резерв через USB-кабель: localhost:8080 на телефоне
+  /// пробрасывается на этот компьютер командой `adb reverse tcp:8080 tcp:80`
+  /// (слетает при переподключении кабеля; порт 80 на телефоне adbd занять
+  /// не может — привилегированный).
   static const String apiFallbackUrl = 'http://localhost:8080/erp_local/hs/log';
 
-  static const List<String> _hosts = [apiBaseUrl, apiFallbackUrl];
+  /// Адреса в порядке приоритета: мобильная сеть (если задана) → Wi-Fi → USB.
+  static List<String> get _hosts => [
+        if (apiMobileUrl.isNotEmpty) apiMobileUrl,
+        apiBaseUrl,
+        apiFallbackUrl,
+      ];
 
   /// Таймаут всех сетевых запросов (последняя попытка).
   static const Duration requestTimeout = Duration(seconds: 15);
@@ -45,14 +53,19 @@ class ApiService {
   /// Индекс хоста, который ответил последним; с него начинаем следующий запрос.
   static int _preferredHost = 0;
 
-  /// GET /requests — список всех активных заявок
-  /// (закрытые статусы уже отфильтрованы на сервере).
+  /// GET /requests — список всех активных заявок.
+  ///
+  /// По контракту закрытые статусы («Завершена», «Перевозка не требуется»,
+  /// «Отменена») отфильтровывает сервер; на случай, когда он отдаёт всё,
+  /// дублируем фильтр на клиенте.
   Future<List<TransportRequest>> getRequests() async {
+    const closedStatuses = {'Завершена', 'Перевозка не требуется', 'Отменена'};
     final data = await _getJson('/requests');
     final rows = data is List ? data : const <dynamic>[];
     return rows
         .whereType<Map<String, dynamic>>()
         .map(TransportRequest.fromJson)
+        .where((request) => !closedStatuses.contains(request.status))
         .toList();
   }
 

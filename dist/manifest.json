@@ -1,0 +1,8 @@
+{
+    "versionName":  "1.0.3",
+    "versionCode":  4,
+    "apkPath":  "releases/perevozka-1.0.3-4.apk",
+    "sha256":  "fd291a1a3e0b9614a9109c6eb604b2e901330dd8623a6d6f5274606547078a2b",
+    "releaseNotes":  "Мобильная сеть (LTE): подключение к базе через публичный адрес 81.211.118.58:8182. Приоритет: мобильная сеть - Wi-Fi - USB",
+    "required":  false
+}

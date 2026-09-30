@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api/api_exceptions.dart';
 import '../api/api_service.dart';
 import '../api/auth_storage.dart';
 import '../models/request_model.dart';
+import '../update/update_controller.dart';
 import '../widgets/error_view.dart';
 import '../widgets/request_card.dart';
 import 'login_screen.dart';
@@ -19,15 +22,33 @@ class RequestsListScreen extends StatefulWidget {
 
 class _RequestsListScreenState extends State<RequestsListScreen> {
   final ApiService _api = ApiService();
+  final UpdateController _updates = UpdateController();
 
   List<TransportRequest>? _requests;
   bool _loading = false;
+  bool _updateDialogShown = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _updates.addListener(_onUpdateChanged);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _updates.removeListener(_onUpdateChanged);
+    _updates.dispose();
+    super.dispose();
+  }
+
+  /// Показываем диалог, как только появилась доступная версия.
+  void _onUpdateChanged() {
+    if (_updates.state is UpdateAvailable && !_updateDialogShown && mounted) {
+      _updateDialogShown = true;
+      _showUpdateDialog();
+    }
   }
 
   Future<void> _load() async {
@@ -42,6 +63,9 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
         _requests = requests;
         _loading = false;
       });
+      // Проверка обновления из публичной папки Яндекс Диска — тихая,
+      // результат (если есть) покажется диалогом.
+      unawaited(_updates.checkForUpdate());
     } on UnauthorizedException {
       await _logout();
     } on ApiException catch (e) {
@@ -70,6 +94,112 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
         builder: (_) => RequestDetailScreen(requestNumber: request.number),
       ),
     );
+  }
+
+  /// Диалог автообновления: версия + примечания → скачивание с прогрессом →
+  /// запуск системного установщика. Для обязательных обновлений нет «Позже».
+  Future<void> _showUpdateDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => ListenableBuilder(
+        listenable: _updates,
+        builder: (context, _) {
+          final state = _updates.state;
+
+          final Widget content;
+          final List<Widget> actions;
+
+          switch (state) {
+            case UpdateAvailable():
+              content = SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Версия ${state.manifest.versionName}'),
+                    if (state.manifest.releaseNotes.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        state.manifest.releaseNotes,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ],
+                ),
+              );
+              actions = [
+                if (!state.manifest.required)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      _updates.skip();
+                    },
+                    child: const Text('Позже'),
+                  ),
+                FilledButton(
+                  onPressed: _updates.downloadAndInstall,
+                  child: const Text('Обновить'),
+                ),
+              ];
+            case UpdateDownloading():
+              final progress = state.progress;
+              content = Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LinearProgressIndicator(value: progress),
+                  const SizedBox(height: 12),
+                  Text(progress == null
+                      ? 'Скачивание обновления…'
+                      : 'Скачивание… ${(progress * 100).round()}%'),
+                ],
+              );
+              actions = const [];
+            case UpdateInstalling():
+              content = const Text(
+                'Запущен установщик — подтвердите установку на экране устройства.',
+              );
+              actions = const [];
+            case UpdateError():
+              content = Text(state.message);
+              actions = [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    _updates.skip();
+                  },
+                  child: const Text('Позже'),
+                ),
+                FilledButton(
+                  onPressed: _updates.retry,
+                  child: const Text('Повторить'),
+                ),
+              ];
+            default:
+              content = const SizedBox.shrink();
+              actions = [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Закрыть'),
+                ),
+              ];
+          }
+
+          return AlertDialog(
+            title: Text(
+              switch (state) {
+                UpdateInstalling() => 'Обновление',
+                UpdateError() => 'Ошибка обновления',
+                _ => 'Доступно обновление',
+              },
+            ),
+            content: content,
+            actions: actions,
+          );
+        },
+      ),
+    );
+    _updateDialogShown = false;
   }
 
   @override

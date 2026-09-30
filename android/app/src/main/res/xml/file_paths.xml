@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- APK обновления скачивается во временную директорию (cache). -->
+    <cache-path name="apk_cache" path="." />
+    <!-- На случай записи во внешний кэш. -->
+    <external-cache-path name="apk_ext_cache" path="." />
+</paths>
