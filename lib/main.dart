@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'api/auth_storage.dart';
 import 'screens/login_screen.dart';
-import 'screens/requests_list_screen.dart';
 
 void main() {
   runApp(const LogisticsApp());
@@ -12,6 +10,11 @@ void main() {
 ///
 /// Данные берёт из HTTP-сервиса опубликованной базы 1С:ERP (только чтение,
 /// GET). Тёмная/светлая тема — по системной, Material 3.
+///
+/// Вход в приложение всегда начинается с экрана авторизации: если рабочие
+/// пользуются устройством по очереди, каждый входит под своей учётной записью
+/// 1С. Отмеченная «Запомнить учётную запись» подставит сохранённый логин
+/// и пароль в поля при следующем запуске.
 class LogisticsApp extends StatelessWidget {
   const LogisticsApp({super.key});
 
@@ -34,37 +37,7 @@ class LogisticsApp extends StatelessWidget {
         ),
       ),
       themeMode: ThemeMode.system,
-      home: const AuthGate(),
-    );
-  }
-}
-
-/// Выбирает стартовый экран: если учётные данные уже сохранены — сразу
-/// список заявок, иначе — экран входа.
-class AuthGate extends StatefulWidget {
-  const AuthGate({super.key});
-
-  @override
-  State<AuthGate> createState() => _AuthGateState();
-}
-
-class _AuthGateState extends State<AuthGate> {
-  late final Future<bool> _hasCredentials = AuthStorage.hasCredentials();
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _hasCredentials,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        return snapshot.data == true
-            ? const RequestsListScreen()
-            : const LoginScreen();
-      },
+      home: const LoginScreen(),
     );
   }
 }

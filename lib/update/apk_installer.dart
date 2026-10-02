@@ -13,7 +13,15 @@ class ApkInstaller {
   /// Передать [apk] системному установщику.
   /// Бросает [PlatformException], если нативная сторона не смогла
   /// (файл не существует, нет permission, подпись не совпала).
+  /// Код ошибки `no_installer` — нет разрешения на установку приложений
+  /// (см. [openInstallPermissionSettings]).
   Future<void> installApk(File apk) async {
     await _channel.invokeMethod<void>('installApk', {'path': apk.path});
+  }
+
+  /// Открыть системные настройки «Установка неизвестных приложений»
+  /// для этого приложения (Android 8+).
+  Future<void> openInstallPermissionSettings() async {
+    await _channel.invokeMethod<void>('openInstallPermissionSettings');
   }
 }

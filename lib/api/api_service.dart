@@ -103,6 +103,23 @@ class ApiService {
     return data?.toString() ?? '';
   }
 
+  /// GET /requests/checkphoto/{num} — есть ли уже фото у заявки.
+  /// Возвращает {"data": {"num": "…", "hasPhoto": true|false}}.
+  /// Ошибка сети/сервера пробрасывается вызывающему коду.
+  Future<bool> requestHasPhoto(String requestNumber) async {
+    final data = await _getJson(
+      '/requests/checkphoto/${Uri.encodeComponent(requestNumber)}',
+    );
+    if (data is Map<String, dynamic>) {
+      final value = data['hasPhoto'];
+      if (value is bool) return value;
+      if (value is int || value is double) return value != 0;
+      final text = value?.toString().toLowerCase();
+      return text == 'true' || text == 'да' || text == '1';
+    }
+    return false;
+  }
+
   /// POST /requests/complete — выполнить заявку.
   /// Сервер проверяет, что заявка «В работе» у текущего исполнителя, затем
   /// переводит её в «Ожидает подтверждения мастера» (или сразу «Завершена»,

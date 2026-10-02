@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -27,6 +29,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   bool _loading = false;
   bool _taking = false;
   bool _completing = false;
+  bool _uploadingPhoto = false;
+  bool _photoAdded = false;
+  bool? _photoExists;
   String? _error;
 
   @override
@@ -46,7 +51,12 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       setState(() {
         _request = request;
         _loading = false;
+        // Состояние фото пересчитывается: локальный флаг сбрасывается,
+        // а наличие фото на сервере проверяется отдельным запросом.
+        _photoAdded = false;
+        _photoExists = null;
       });
+      unawaited(_checkPhoto(request));
     } on UnauthorizedException {
       await _logout();
     } on ApiException catch (e) {
@@ -57,6 +67,24 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       });
     }
   }
+
+  /// Проверка на сервере, есть ли уже фото у заявки (GET /requests/checkphoto).
+  /// Только для заявок с «ТребуетсяФото». Если проверка не удалась (сеть) —
+  /// считаем, что фото нет: рабочий всегда может переснять.
+  Future<void> _checkPhoto(TransportRequest request) async {
+    if (!request.requiresPhoto) return;
+    try {
+      final has = await _api.requestHasPhoto(request.number);
+      if (!mounted) return;
+      setState(() => _photoExists = has);
+    } on ApiException {
+      if (!mounted) return;
+      setState(() => _photoExists = false);
+    }
+  }
+
+  /// Фото загружено: только что в этом сеансе или уже было на сервере.
+  bool get _photoLoaded => _photoAdded || (_photoExists ?? false);
 
   /// 401 — учётные данные недействительны: чистим хранилище
   /// и возвращаемся на экран входа.
@@ -69,30 +97,55 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     );
   }
 
+  /// Съёмка и загрузка фото выполнения: камера → POST /requests/photo →
+  /// фото прикрепляется к заявке в 1С. «Выполнено» доступно только после
+  /// успешной загрузки (флаг [_photoAdded]). Повторный тап — переснять.
+  Future<void> _addPhoto() async {
+    final request = _request;
+    if (request == null || _uploadingPhoto) return;
+
+    final photo = await _picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 85,
+    );
+    if (photo == null) return; // съёмка отменена
+
+    setState(() => _uploadingPhoto = true);
+    try {
+      final bytes = await photo.readAsBytes();
+      await _api.uploadPhoto(request.number, bytes);
+      if (!mounted) return;
+      setState(() => _photoAdded = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Фото загружено и прикреплено к заявке'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } on UnauthorizedException {
+      await _logout();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), duration: const Duration(seconds: 4)),
+      );
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
   /// «Выполнено»: POST /requests/complete. Сервер переводит заявку
   /// в «Ожидает подтверждения мастера» (или сразу «Завершена») и создаёт
   /// задачу мастеру; отказ показываем текстом из {"error": …}.
-  /// Если у заявки стоит «ТребуетсяФото» — сначала камера и загрузка снимка
-  /// (POST /requests/photo), отмена съёмки отменяет выполнение.
+  /// Если требуется фото — кнопка доступна только после загрузки фото
+  /// (см. [_addPhoto]).
   Future<void> _completeRequest() async {
     final request = _request;
     if (request == null || _completing) return;
     setState(() => _completing = true);
     try {
-      if (request.requiresPhoto) {
-        final photo = await _picker.pickImage(
-          source: ImageSource.camera,
-          maxWidth: 1920,
-          maxHeight: 1920,
-          imageQuality: 85,
-        );
-        if (photo == null) {
-          return; // съёмка отменена — заявку не выполняем
-        }
-        final bytes = await photo.readAsBytes();
-        await _api.uploadPhoto(request.number, bytes);
-      }
-
       await _api.completeRequest(request.number);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -101,7 +154,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
           duration: Duration(seconds: 2),
         ),
       );
-      await _load();
+      // Работа завершена — возвращаемся в список заявок; он обновится сам
+      // (см. _openDetails на экране списка).
+      Navigator.of(context).pop();
     } on UnauthorizedException {
       await _logout();
     } on ApiException catch (e) {
@@ -297,9 +352,12 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
 
     // Доступность по статусу (сервер дополнительно проверяет сам):
     //  • «Взять в работу» — пока заявка не в работе и не ждёт мастера;
-    //  • «Выполнено» — только когда заявка в работе.
+    //  • «Сделать фото» — только у заявок в работе;
+    //  • «Выполнено» — только когда заявка в работе, а если требуется фото —
+    //    ещё и после его загрузки (проверка по серверу /requests/checkphoto).
     final canTake = !request.isInWork && !request.isWaitingMaster;
-    final canComplete = request.isInWork;
+    final canComplete =
+        request.isInWork && (!request.requiresPhoto || _photoLoaded);
 
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -308,12 +366,20 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildTakeButton(enabled: canTake),
+          if (request.requiresPhoto && request.isInWork) ...[
+            const SizedBox(height: 12),
+            _buildPhotoButton(),
+          ],
           const SizedBox(height: 12),
           _buildCompleteButton(enabled: canComplete),
-          if (canComplete && request.requiresPhoto) ...[
+          if (request.isInWork &&
+              request.requiresPhoto &&
+              !_photoLoaded) ...[
             const SizedBox(height: 8),
             Text(
-              'Перед выполнением нужно сфотографировать груз',
+              _photoExists == null
+                  ? 'Проверяем наличие фото…'
+                  : 'Перед выполнением нужно сфотографировать груз',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -345,6 +411,31 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
               child: CircularProgressIndicator(strokeWidth: 3),
             )
           : const Text('ВЗЯТЬ В РАБОТУ'),
+    );
+  }
+
+  /// Кнопка «Сделать фото» — камера и загрузка снимка в 1С (POST
+  /// /requests/photo). После успеха меняет вид на «Фото добавлено»;
+  /// повторный тап позволяет переснять.
+  Widget _buildPhotoButton() {
+    return ElevatedButton.icon(
+      onPressed: _uploadingPhoto ? null : _addPhoto,
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size.fromHeight(56),
+        textStyle: const TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.1,
+        ),
+      ),
+      icon: _uploadingPhoto
+          ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            )
+          : Icon(_photoLoaded ? Icons.check_circle : Icons.photo_camera),
+      label: Text(_photoLoaded ? 'ФОТО ДОБАВЛЕНО' : 'СДЕЛАТЬ ФОТО'),
     );
   }
 

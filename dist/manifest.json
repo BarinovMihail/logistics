@@ -1,8 +1,8 @@
 {
-    "versionName":  "1.0.3",
-    "versionCode":  4,
-    "apkPath":  "releases/perevozka-1.0.3-4.apk",
-    "sha256":  "fd291a1a3e0b9614a9109c6eb604b2e901330dd8623a6d6f5274606547078a2b",
-    "releaseNotes":  "Мобильная сеть (LTE): подключение к базе через публичный адрес 81.211.118.58:8182. Приоритет: мобильная сеть - Wi-Fi - USB",
+    "versionName":  "1.0.11",
+    "versionCode":  12,
+    "apkPath":  "releases/perevozka-1.0.11-12.apk",
+    "sha256":  "ba7273151e05dc4e8dfb74c23f4923646a1102d6e5c0e77bba9f73d80b57692a",
+    "releaseNotes":  "После выполнения заявки - возврат в список заявок. Последняя карточка в списке больше не обрезается - дата видна полностью",
     "required":  false
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'apk_installer.dart';
 import 'update_repository.dart';
@@ -34,6 +36,14 @@ class UpdateInstalling extends UpdateState {
   const UpdateInstalling();
 }
 
+/// Скачано, но система не даёт ставить: нужно разрешение «установка
+/// неизвестных приложений». Диалог направляет в настройки.
+class UpdateNeedsPermission extends UpdateState {
+  const UpdateNeedsPermission(this.manifest);
+
+  final VersionManifest manifest;
+}
+
 /// Ошибка скачивания. [message] — для UI.
 class UpdateError extends UpdateState {
   const UpdateError(this.message);
@@ -44,6 +54,12 @@ class UpdateError extends UpdateState {
 /// Контроллер автообновления: проверяет манифест, качает APK,
 /// запускает системный установщик.
 class UpdateController extends ChangeNotifier {
+  /// Ключ в SharedPreferences: versionCode версии, которую установщик должен
+  /// поставить. После перезапуска приложения экран входа сравнит его с
+  /// фактической версией: совпало — обновление удалось, возможен автологин
+  /// под запомненной учёткой сразу в список заявок (флаг разовый).
+  static const String pendingVersionKey = 'update_pending_version';
+
   UpdateController({UpdateRepository? repo, ApkInstaller? installer})
       : _repo = repo ?? UpdateRepository(),
         _installer = installer ?? ApkInstaller();
@@ -102,9 +118,26 @@ class UpdateController extends ChangeNotifier {
       );
       state = const UpdateInstalling();
       notifyListeners();
-      await _installer.installApk(apk);
-      // После запуска установщика оператор подтверждает установку в системном
-      // диалоге; сюда вернёмся уже новой версией после перезапуска.
+      // Запоминаем, какую версию ставим: после перезапуска экран входа
+      // сверирует её с фактической и при совпадении войдёт автоматически.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(pendingVersionKey, s.manifest.versionCode);
+      try {
+        await _installer.installApk(apk);
+        // После запуска установщика оператор подтверждает установку в системном
+        // диалоге; сюда вернёмся уже новой версией после перезапуска.
+      } on PlatformException catch (e) {
+        if (e.code == 'no_installer') {
+          // Система не разрешила ставить APK: отправляем в настройки
+          // «установка неизвестных приложений» — это разовое действие.
+          state = UpdateNeedsPermission(s.manifest);
+          notifyListeners();
+          await _installer.openInstallPermissionSettings();
+        } else {
+          state = UpdateError('Не удалось запустить установку: ${e.message}');
+          notifyListeners();
+        }
+      }
     } on UpdateException catch (e) {
       state = UpdateError(e.message);
       notifyListeners();
@@ -113,6 +146,19 @@ class UpdateController extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Повторить установку после выдачи разрешения в настройках.
+  Future<void> retryInstall() async {
+    final s = state;
+    if (s is! UpdateNeedsPermission) return;
+    state = UpdateAvailable(s.manifest);
+    notifyListeners();
+    await downloadAndInstall();
+  }
+
+  /// Открыть системные настройки «Установка неизвестных приложений».
+  Future<void> openInstallPermissionSettings() =>
+      _installer.openInstallPermissionSettings();
 
   /// Сброс к idle (кнопка «Позже»).
   void skip() {

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_exceptions.dart';
 import '../api/api_service.dart';
 import '../api/auth_storage.dart';
+import '../update/update_controller.dart';
 import 'requests_list_screen.dart';
 
 /// Экран входа: логин и пароль пользователя 1С (Basic Auth).
@@ -21,7 +24,53 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _obscurePassword = true;
   bool _loading = false;
+  bool _remember = true;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
+
+  /// Предзаполнение сохранённой учёткой. Если прошлый вход был без
+  /// «Запомнить» — стираем учётные данные (они были нужны только для
+  /// закончившегося сеанса).
+  ///
+  /// Разовый автологин после обновления: перед установкой обновления
+  /// контроллер запомнил ожидаемый versionCode; если сейчас установлена
+  /// именно эта версия (обновление удалось) и учётка запомнена — входим
+  /// сразу в список заявок, минуя ручной ввод.
+  Future<void> _loadSavedCredentials() async {
+    final saved = await AuthStorage.read();
+    final remembered = await AuthStorage.wasRemembered();
+    final autoLogin = await _updateJustInstalled();
+    if (!mounted) return;
+    if (saved != null && remembered) {
+      _loginController.text = saved.login;
+      _passwordController.text = saved.password;
+      setState(() => _remember = true);
+      if (autoLogin) {
+        await _submit();
+        return;
+      }
+    } else {
+      await AuthStorage.clear();
+      setState(() => _remember = false);
+    }
+  }
+
+  /// Совпал ли установленный versionCode с тем, что ожидался при обновлении.
+  /// Флаг одноразовый: проверяется и стирается при любом запуске.
+  Future<bool> _updateJustInstalled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pending = prefs.getInt(UpdateController.pendingVersionKey);
+    if (pending == null) return false;
+    await prefs.remove(UpdateController.pendingVersionKey);
+    final info = await PackageInfo.fromPlatform();
+    final current = int.tryParse(info.buildNumber) ?? 0;
+    return current == pending;
+  }
 
   @override
   void dispose() {
@@ -44,6 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
     await AuthStorage.save(
       _loginController.text.trim(),
       _passwordController.text,
+      remember: _remember,
     );
     try {
       await _api.getRequests();
@@ -146,6 +196,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         (value == null || value.isEmpty)
                             ? 'Введите пароль'
                             : null,
+                  ),
+                  CheckboxListTile(
+                    value: _remember,
+                    onChanged: _loading
+                        ? null
+                        : (value) =>
+                            setState(() => _remember = value ?? false),
+                    title: const Text('Запомнить учётную запись'),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 16),

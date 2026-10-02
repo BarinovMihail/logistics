@@ -1,6 +1,9 @@
 package com.example.logistics
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -25,13 +28,39 @@ class MainActivity : FlutterActivity() {
                         try {
                             installApk(path)
                             result.success(null)
+                        } catch (e: ActivityNotFoundException) {
+                            // Обычно значит: приложение не имеет права ставить
+                            // APK (Android 8+ «установка неизвестных
+                            // приложений»), а прошивка не показывает запрос.
+                            result.error(
+                                "no_installer",
+                                "Нет разрешения на установку приложений",
+                                null
+                            )
                         } catch (e: Exception) {
                             result.error("install_failed", e.message, null)
+                        }
+                    }
+                    "openInstallPermissionSettings" -> {
+                        try {
+                            openInstallPermissionSettings()
+                            result.success(null)
+                        } catch (e: Exception) {
+                            result.error("open_failed", e.message, null)
                         }
                     }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /// Открыть системные настройки «Установка неизвестных приложений»
+    /// для этого приложения — чтобы пользователь выдал разрешение.
+    private fun openInstallPermissionSettings() {
+        val uri = Uri.parse("package:$packageName")
+        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, uri)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
     }
 
     /// Запуск системного установщика APK (для автообновления с Яндекс Диска).

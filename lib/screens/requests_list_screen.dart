@@ -20,27 +20,50 @@ class RequestsListScreen extends StatefulWidget {
   State<RequestsListScreen> createState() => _RequestsListScreenState();
 }
 
-class _RequestsListScreenState extends State<RequestsListScreen> {
+class _RequestsListScreenState extends State<RequestsListScreen>
+    with WidgetsBindingObserver {
   final ApiService _api = ApiService();
   final UpdateController _updates = UpdateController();
 
   List<TransportRequest>? _requests;
   bool _loading = false;
   bool _updateDialogShown = false;
+  bool _updateDialogOpen = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _updates.addListener(_onUpdateChanged);
     _load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _updates.removeListener(_onUpdateChanged);
     _updates.dispose();
     super.dispose();
+  }
+
+  /// Планшет проснулся после блокировки (или пользователь вернулся из
+  /// системного установщика). Если в фоне скачивание упало в ошибку или
+  /// диалог «Запущен установщик» остался висеть (установку отменили) —
+  /// тихо закрываем диалог и перепроверяем: если обновление ещё доступно,
+  /// диалог откроется заново в нормальном виде.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    final current = _updates.state;
+    final stale = current is UpdateError || current is UpdateInstalling;
+    if (!stale) return;
+    if (_updateDialogOpen) {
+      Navigator.of(context).pop();
+      _updateDialogOpen = false;
+    }
+    _updates.skip();
+    unawaited(_updates.checkForUpdate());
   }
 
   /// Показываем диалог, как только появилась доступная версия.
@@ -94,15 +117,20 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
         builder: (_) => RequestDetailScreen(requestNumber: request.number),
       ),
     );
+    // Вернулись с карточки — обновляем список: статус, исполнитель или
+    // состав заявок могли измениться (взял в работу, выполнил, фото).
+    if (mounted) await _load();
   }
 
   /// Диалог автообновления: версия + примечания → скачивание с прогрессом →
   /// запуск системного установщика. Для обязательных обновлений нет «Позже».
   Future<void> _showUpdateDialog() async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => ListenableBuilder(
+    _updateDialogOpen = true;
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => ListenableBuilder(
         listenable: _updates,
         builder: (context, _) {
           final state = _updates.state;
@@ -155,11 +183,59 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
                 ],
               );
               actions = const [];
+            case UpdateNeedsPermission():
+              content = SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Система запрещает приложению устанавливать обновления. '
+                      'В открывшихся настройках включите «Разрешить из этого '
+                      'источника», вернитесь и нажмите «Повторить установку».',
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Версия ${state.manifest.versionName} · '
+                      '${state.manifest.releaseNotes}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              );
+              actions = [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    _updates.skip();
+                  },
+                  child: const Text('Позже'),
+                ),
+                TextButton(
+                  onPressed: () => _updates.openInstallPermissionSettings(),
+                  child: const Text('Открыть настройки'),
+                ),
+                FilledButton(
+                  onPressed: _updates.retryInstall,
+                  child: const Text('Повторить установку'),
+                ),
+              ];
             case UpdateInstalling():
               content = const Text(
-                'Запущен установщик — подтвердите установку на экране устройства.',
+                'Запущен установщик — подтвердите установку на экране '
+                'устройства. Если установщик не открылся (или вы отменили '
+                'установку), нажмите «Закрыть» и запустите обновление '
+                'повторно.',
               );
-              actions = const [];
+              actions = [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    _updates.skip();
+                  },
+                  child: const Text('Закрыть'),
+                ),
+              ];
             case UpdateError():
               content = Text(state.message);
               actions = [
@@ -197,9 +273,12 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
             actions: actions,
           );
         },
-      ),
-    );
-    _updateDialogShown = false;
+        ),
+      );
+    } finally {
+      _updateDialogOpen = false;
+      _updateDialogShown = false;
+    }
   }
 
   @override
@@ -248,7 +327,9 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
       onRefresh: _load,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        // Нижний отступ: последняя карточка (включая строку с датой)
+        // не должна обрезаться краем экрана.
+        padding: const EdgeInsets.fromLTRB(0, 6, 0, 24),
         itemCount: requests.length,
         itemBuilder: (context, index) {
           final request = requests[index];
