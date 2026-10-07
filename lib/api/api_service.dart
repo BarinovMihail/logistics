@@ -85,6 +85,57 @@ class ApiService {
     await _postJson('/requests/take', {'num': num});
   }
 
+  /// POST с сохранением метода и тела при редиректах.
+  ///
+  /// Встроенное авто-следование перенаправлениям превращает POST в GET
+  /// (RFC 301/302/303), из-за чего загрузка фото падала с «Ошибка сервера
+  /// (код 301)»: Apache канонизирует путь фото в /ERP_Local/…/photo/ через
+  /// 301. Здесь редиректы отключены и обрабатываются вручную — повторным
+  /// POST по Location (до 3 переходов), с тем же телом.
+  Future<http.Response> _postPreservingMethod(
+    Uri uri,
+    Map<String, String> headers, {
+    List<int>? bytes,
+    String? jsonBody,
+    int redirectsLeft = 3,
+  }) async {
+    final request = http.Request('POST', uri)
+      ..followRedirects = false
+      ..headers.addAll(headers);
+    if (bytes != null) {
+      request.bodyBytes = bytes;
+    } else if (jsonBody != null) {
+      request.body = jsonBody;
+    }
+    final client = http.Client();
+    http.Response response;
+    try {
+      final streamed = await client.send(request);
+      response = await http.Response.fromStream(streamed);
+    } catch (_) {
+      client.close();
+      rethrow;
+    }
+    client.close();
+
+    final location = response.headers['location'];
+    final isRedirect = const {301, 302, 303, 307, 308}
+        .contains(response.statusCode);
+    if (isRedirect &&
+        location != null &&
+        location.isNotEmpty &&
+        redirectsLeft > 0) {
+      return _postPreservingMethod(
+        uri.resolve(location),
+        headers,
+        bytes: bytes,
+        jsonBody: jsonBody,
+        redirectsLeft: redirectsLeft - 1,
+      );
+    }
+    return response;
+  }
+
   /// POST /requests/photo?num=… — загрузить фото выполнения заявки.
   /// Тело запроса — двоичные данные изображения (Content-Type image/jpeg),
   /// номер заявки — query-параметр num. Сервер сохраняет фото как
@@ -92,10 +143,10 @@ class ApiService {
   Future<String> uploadPhoto(String num, Uint8List bytes,
       {String mimeType = 'image/jpeg'}) async {
     final response = await _send(
-      (uri, headers) => http.post(
+      (uri, headers) => _postPreservingMethod(
         uri.replace(queryParameters: {'num': num}),
-        headers: {...headers, 'Content-Type': mimeType},
-        body: bytes,
+        {...headers, 'Content-Type': mimeType},
+        bytes: bytes,
       ),
       '/requests/photo',
     );
@@ -148,10 +199,10 @@ class ApiService {
   // ignore: unused_element
   Future<dynamic> _postJson(String path, Map<String, dynamic> body) async {
     final response = await _send(
-      (uri, headers) => http.post(
+      (uri, headers) => _postPreservingMethod(
         uri,
-        headers: {...headers, 'Content-Type': 'application/json'},
-        body: jsonEncode(body),
+        {...headers, 'Content-Type': 'application/json'},
+        jsonBody: jsonEncode(body),
       ),
       path,
     );

@@ -26,6 +26,7 @@ class _RequestsListScreenState extends State<RequestsListScreen>
   final UpdateController _updates = UpdateController();
 
   List<TransportRequest>? _requests;
+  String? _currentLogin;
   bool _loading = false;
   bool _updateDialogShown = false;
   bool _updateDialogOpen = false;
@@ -36,8 +37,23 @@ class _RequestsListScreenState extends State<RequestsListScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _updates.addListener(_onUpdateChanged);
+    _loadCurrentLogin();
     _load();
   }
+
+  /// Логин вошедшего пользователя — для пометки «текущая задача»
+  /// (заявка «В работе», исполнитель которой совпадает с логином).
+  Future<void> _loadCurrentLogin() async {
+    final creds = await AuthStorage.read();
+    if (!mounted) return;
+    setState(() => _currentLogin = creds?.login);
+  }
+
+  /// Заявка в работе у текущего пользователя.
+  bool _isCurrentTask(TransportRequest request) =>
+      _currentLogin != null &&
+      request.executor == _currentLogin &&
+      request.isInWork;
 
   @override
   void dispose() {
@@ -323,6 +339,15 @@ class _RequestsListScreenState extends State<RequestsListScreen>
       );
     }
 
+    // Заявки текущего пользователя в работе — первыми (пометка «текущая
+    // задача»), внутри групп порядок сервера (по дате) сохраняется.
+    final currentTasks = <TransportRequest>[];
+    final others = <TransportRequest>[];
+    for (final request in requests) {
+      (_isCurrentTask(request) ? currentTasks : others).add(request);
+    }
+    final sorted = [...currentTasks, ...others];
+
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
@@ -330,12 +355,13 @@ class _RequestsListScreenState extends State<RequestsListScreen>
         // Нижний отступ: последняя карточка (включая строку с датой)
         // не должна обрезаться краем экрана.
         padding: const EdgeInsets.fromLTRB(0, 6, 0, 24),
-        itemCount: requests.length,
+        itemCount: sorted.length,
         itemBuilder: (context, index) {
-          final request = requests[index];
+          final request = sorted[index];
           return RequestCard(
             request: request,
             onTap: () => _openDetails(request),
+            isCurrentTask: _isCurrentTask(request),
           );
         },
       ),

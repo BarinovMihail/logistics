@@ -190,11 +190,37 @@ if (-not $BuildOnly) {
         return $resp.href
     }
 
+    # Размер файла на Диске (-1, если файла нет). Для проверки, что загрузка
+    # действительно долетела: Диск может принять PUT (2xx/202), но файл
+    # в итоге не появится — без проверки релиз "тихо" ломается.
+    function Get-RemoteFileSize {
+        param([string]$DiskPath)
+        $encodedPath = [uri]::EscapeDataString($DiskPath)
+        try {
+            $resp = Invoke-RestMethod -Uri "$apiBase/resources?path=$encodedPath" -Method Get -Headers @{ Authorization = "OAuth $OAuthToken" }
+            return [long]$resp.size
+        }
+        catch {
+            return -1
+        }
+    }
+
     function Send-ToDisk {
         param([string]$LocalPath, [string]$DiskPath)
         Write-Host "       -> $DiskPath" -ForegroundColor DarkGray
-        $href = Get-UploadHref -DiskPath $DiskPath
-        Invoke-RestMethod -Uri $href -Method Put -InFile $LocalPath -ContentType "application/octet-stream" | Out-Null
+        $localSize = (Get-Item -LiteralPath $LocalPath).Length
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            $href = Get-UploadHref -DiskPath $DiskPath
+            Invoke-RestMethod -Uri $href -Method Put -InFile $LocalPath -ContentType "application/octet-stream" | Out-Null
+            Start-Sleep -Seconds 3
+            $remoteSize = Get-RemoteFileSize -DiskPath $DiskPath
+            if ($remoteSize -eq $localSize) {
+                Write-Host "       OK: $remoteSize байт на Диске" -ForegroundColor DarkGray
+                return
+            }
+            Write-Warning "Проверка загрузки не прошла (попытка $attempt): на Диске '$remoteSize', локально $localSize. Повторяю..."
+        }
+        throw "Файл '$DiskPath' не долетел на Яндекс Диск после 3 попыток. Манифест НЕ обновлялся."
     }
 
     # Сначала APK, последним — manifest.json: чтобы клиенты не увидели

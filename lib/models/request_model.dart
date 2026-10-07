@@ -102,6 +102,7 @@ class TransportRequest {
     this.quantity,
     this.declaredOperationsCount,
     this.specialConditions,
+    this.hasSpecialConditions = false,
     this.executor,
     this.master = '',
     this.confirmedByMaster = false,
@@ -121,7 +122,8 @@ class TransportRequest {
         operations: _operations(json['Операции']),
         quantity: _optionalInt(json['Количество']),
         declaredOperationsCount: _optionalInt(json['Операций']),
-        specialConditions: _optionalString(json['ОсобыеУсловия']),
+        specialConditions: _conditionsText(json['ОсобыеУсловия']),
+        hasSpecialConditions: _hasConditions(json['ОсобыеУсловия']),
         executor: _optionalString(json['Исполнитель']),
         master: _string(json['Мастер']),
         confirmedByMaster: _bool(json['ПодтвержденоМастером']),
@@ -160,8 +162,12 @@ class TransportRequest {
   /// «Операций» в шапке — количество операций (отдаёт список).
   final int? declaredOperationsCount;
 
-  /// «ОсобыеУсловия» — заполняется только в карточке заявки.
+  /// «ОсобыеУсловия» — заполняется только в карточке заявки (текст условий).
   final String? specialConditions;
+
+  /// Есть ли особые условия. В списке «ОсобыеУсловия» приходит булевым
+  /// (true/false), в карточке — текстом (непустой текст = есть условия).
+  final bool hasSpecialConditions;
 
   /// «Исполнитель» — заполняется только в карточке заявки.
   final String? executor;
@@ -274,4 +280,18 @@ List<RequestOperation> _operations(dynamic value) {
       .whereType<Map<String, dynamic>>()
       .map(RequestOperation.fromJson)
       .toList();
+}
+
+/// Текст особых условий: булево значение (список) текстом не является.
+String? _conditionsText(dynamic value) =>
+    value is String ? _optionalString(value) : null;
+
+/// Признак «есть особые условия»: true для bool true; для текста —
+/// непустая строка (кроме «нет»/«false»).
+bool _hasConditions(dynamic value) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is! String) return false;
+  final text = value.trim().toLowerCase();
+  return text.isNotEmpty && text != 'нет' && text != 'false' && text != '0';
 }

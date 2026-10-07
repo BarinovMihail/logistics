@@ -1,8 +1,8 @@
 {
-    "versionName":  "1.0.11",
-    "versionCode":  12,
-    "apkPath":  "releases/perevozka-1.0.11-12.apk",
-    "sha256":  "ba7273151e05dc4e8dfb74c23f4923646a1102d6e5c0e77bba9f73d80b57692a",
-    "releaseNotes":  "После выполнения заявки - возврат в список заявок. Последняя карточка в списке больше не обрезается - дата видна полностью",
+    "versionName":  "1.0.18",
+    "versionCode":  19,
+    "apkPath":  "releases/perevozka-1.0.18-19.apk",
+    "sha256":  "7893fc223cbaea9702f7e22824e3336e03826f0ad2301b7d2359a5279c19fb76",
+    "releaseNotes":  "Дата заявки в списке - тем же шрифтом и размером, что и номер заявки",
     "required":  false
 }

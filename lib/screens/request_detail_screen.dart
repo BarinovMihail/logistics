@@ -535,29 +535,50 @@ class _Field extends StatelessWidget {
   }
 }
 
-/// Одна операция заявки: груз (номенклатура, ККМ, количество),
-/// технологическая операция, маршрут и документы-основания (ПЗ,
-/// маршрутный лист). [number] — номер, показывается когда операций несколько.
-class _OperationView extends StatelessWidget {
+/// Одна операция заявки в компактном виде: номенклатура, количество, ККМ
+/// и маршрут (виды РЦ). Документы-основания (ПЗ, маршрутный лист), техоперация
+/// и номера операций техпроцесса скрыты за ссылкой «Дополнительно».
+/// [number] — номер, показывается когда операций несколько.
+class _OperationView extends StatefulWidget {
   const _OperationView({required this.operation, this.number});
 
   final RequestOperation operation;
   final int? number;
 
   @override
+  State<_OperationView> createState() => _OperationViewState();
+}
+
+class _OperationViewState extends State<_OperationView> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final smallStyle = TextStyle(
-      fontSize: 13,
-      color: theme.colorScheme.onSurfaceVariant,
-    );
+    final operation = widget.operation;
+
+    final extras = <Widget>[
+      if (operation.techOperation.isNotEmpty)
+        _Field(
+          label: 'Технологическая операция',
+          value: operation.techOperation,
+        ),
+      if (operation.routeSheet.isNotEmpty)
+        _Field(label: 'Маршрутный лист', value: operation.routeSheet),
+      if (operation.operationNumber > 0)
+        _Field(
+          label: 'Операции техпроцесса',
+          value: '${operation.operationNumber}'
+              '${operation.nextOperationNumber > 0 ? ' → ${operation.nextOperationNumber}' : ''}',
+        ),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (number != null) ...[
+        if (widget.number != null) ...[
           Text(
-            'ОПЕРАЦИЯ $number',
+            'ОПЕРАЦИЯ ${widget.number}',
             style: theme.textTheme.labelLarge?.copyWith(
               color: theme.colorScheme.primary,
               letterSpacing: 1.2,
@@ -570,16 +591,24 @@ class _OperationView extends StatelessWidget {
           value: operation.item.isEmpty ? '—' : operation.item,
           emphasized: true,
         ),
-        _Field(label: 'Количество', value: '${operation.quantity} шт'),
-        _Field(
-          label: 'ККМ',
-          value: operation.kkm.isEmpty ? '—' : operation.kkm,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _Field(
+                label: 'Количество',
+                value: '${operation.quantity} шт',
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _Field(
+                label: 'ККМ',
+                value: operation.kkm.isEmpty ? '—' : operation.kkm,
+              ),
+            ),
+          ],
         ),
-        if (operation.techOperation.isNotEmpty)
-          _Field(
-            label: 'Технологическая операция',
-            value: operation.techOperation,
-          ),
         const SizedBox(height: 4),
         _RoutePoint(place: operation.fromDisplay),
         const Padding(
@@ -587,24 +616,37 @@ class _OperationView extends StatelessWidget {
           child: Icon(Icons.south, color: Colors.grey),
         ),
         _RoutePoint(place: operation.toDisplay),
-        const SizedBox(height: 8),
-        if (operation.productionOrder.isNotEmpty)
-          Text('ПЗ: ${operation.productionOrder}', style: smallStyle),
-        if (operation.routeSheet.isNotEmpty)
+        if (extras.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text('Маршрутный лист: ${operation.routeSheet}',
-                style: smallStyle),
-          ),
-        if (operation.operationNumber > 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              'Операции техпроцесса: ${operation.operationNumber}'
-              '${operation.nextOperationNumber > 0 ? ' → ${operation.nextOperationNumber}' : ''}',
-              style: smallStyle,
+            padding: const EdgeInsets.only(top: 4),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _expanded ? 'Свернуть' : 'Дополнительно',
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
+        if (_expanded) ...extras,
       ],
     );
   }

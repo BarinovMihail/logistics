@@ -8,11 +8,24 @@ import 'status_badge.dart';
 /// Список `/requests` отдаёт сводку по заявке (без состава операций):
 /// номер, дата, статус, подразделение, количество операций, суммарное
 /// количество и требования. Детальный состав операций — на экране карточки.
+///
+/// Шапка карточки: бейдж статуса и индикаторы требований (📷 требуется фото,
+/// 👤 нужен мастер, ⚠ особые условия) справа от него; ниже — номер заявки
+/// с датой, сводка операций и транспорт.
+///
+/// [isCurrentTask] — заявка «В работе» у вошедшего пользователя: поднимается
+/// в начало списка и помечается чипом «★ ТЕКУЩАЯ ЗАДАЧА».
 class RequestCard extends StatelessWidget {
-  const RequestCard({super.key, required this.request, required this.onTap});
+  const RequestCard({
+    super.key,
+    required this.request,
+    required this.onTap,
+    this.isCurrentTask = false,
+  });
 
   final TransportRequest request;
   final VoidCallback onTap;
+  final bool isCurrentTask;
 
   @override
   Widget build(BuildContext context) {
@@ -26,11 +39,6 @@ class RequestCard extends StatelessWidget {
         '${multi ? 'Всего: ' : ''}${request.totalQuantity} шт',
     ].join(' · ');
 
-    final meta = <String>[
-      if (request.requiresPhoto) '📷 требуется фото',
-      if (request.requiresMaster) '👤 нужен мастер',
-    ].join(' · ');
-
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       clipBehavior: Clip.antiAlias,
@@ -41,12 +49,55 @@ class RequestCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              StatusBadge(status: request.status),
+              // Статус + индикаторы требований справа от него.
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (isCurrentTask)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00897B), // бирюзовый — не как статусы
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        '★ ТЕКУЩАЯ ЗАДАЧА',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  StatusBadge(status: request.status),
+                  if (request.requiresPhoto) _indicator(theme, '📷'),
+                  if (request.requiresMaster) _indicator(theme, '👤'),
+                  if (request.hasSpecialConditions) _indicator(theme, '⚠'),
+                ],
+              ),
               const SizedBox(height: 10),
-              Text(
-                'Заявка № ${request.number}',
-                style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
+              // Номер заявки и дата создания на одной строке.
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Заявка № ${request.number}',
+                      style: theme.textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    formatDate(request.date),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
               if (summary.isNotEmpty) ...[
                 const SizedBox(height: 6),
@@ -56,36 +107,32 @@ class RequestCard extends StatelessWidget {
                       ?.copyWith(fontWeight: FontWeight.w500),
                 ),
               ],
-              if (request.subdivision.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text('🏢 ${request.subdivision}',
-                    style: theme.textTheme.bodyLarge),
-              ],
               const SizedBox(height: 6),
               Text(
                 '🚛 Транспорт: ${request.transport.isEmpty ? 'не указан' : request.transport}',
                 style: theme.textTheme.bodyLarge,
               ),
-              if (meta.isNotEmpty) ...[
+              if (request.subdivision.isNotEmpty) ...[
                 const SizedBox(height: 6),
-                Text(
-                  meta,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                Text('🏢 ${request.subdivision}',
+                    style: theme.textTheme.bodyLarge),
               ],
-              const SizedBox(height: 6),
-              Text(
-                formatDate(request.date),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  /// Компактный индикатор требования рядом со статусом.
+  Widget _indicator(ThemeData theme, String emoji) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Text(emoji, style: const TextStyle(fontSize: 15)),
+      );
 }
