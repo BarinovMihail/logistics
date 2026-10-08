@@ -13,9 +13,17 @@ import 'login_screen.dart';
 
 /// Экран 2 — карточка заявки (загружается по номеру с сервера).
 class RequestDetailScreen extends StatefulWidget {
-  const RequestDetailScreen({super.key, required this.requestNumber});
+  const RequestDetailScreen({
+    super.key,
+    required this.requestNumber,
+    this.initialTransport,
+  });
 
   final String requestNumber;
+
+  /// Транспорт, известный из списка заявок (карточка его пока не отдаёт) —
+  /// используется для проверки «ТС выбран».
+  final String? initialTransport;
 
   @override
   State<RequestDetailScreen> createState() => _RequestDetailScreenState();
@@ -172,9 +180,28 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   /// «Взять в работу»: POST /requests/take, после успеха перезагружаем
   /// карточку (статус, исполнитель, дата взятия). Отказ сервера (400)
   /// показываем текстом из {"error": …}.
+  /// Эффективный ТС заявки: из карточки, а если карточка его не отдала —
+  /// из списка (там поле есть).
+  String get _effectiveTransport =>
+      (_request?.transport.isNotEmpty ?? false)
+          ? _request!.transport
+          : (widget.initialTransport ?? '');
+
+  /// «Взять в работу»: POST /requests/take. Если ТС не выбран — сообщение
+  /// (выбор ТС — в списке заявок), сервер дополнительно проверяет сам.
   Future<void> _takeRequest() async {
     final request = _request;
     if (request == null || _taking) return;
+    if (_effectiveTransport.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Сначала выберите транспортное средство — '
+              'строка 🚛 в списке заявок'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
     setState(() => _taking = true);
     try {
       await _api.takeRequest(request.number);
@@ -352,6 +379,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
 
     // Доступность по статусу (сервер дополнительно проверяет сам):
     //  • «Взять в работу» — пока заявка не в работе и не ждёт мастера;
+    //    про отсутствие ТС — сообщение при нажатии (см. _takeRequest);
     //  • «Сделать фото» — только у заявок в работе;
     //  • «Выполнено» — только когда заявка в работе, а если требуется фото —
     //    ещё и после его загрузки (проверка по серверу /requests/checkphoto).

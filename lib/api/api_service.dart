@@ -154,6 +154,24 @@ class ApiService {
     return data?.toString() ?? '';
   }
 
+  /// GET /transports/{вид} — список транспортных средств по виду
+  /// (наименования ТС, например «8319НУ Каток»).
+  Future<List<String>> getVehicles(String kind) async {
+    final data = await _getJson('/transports/${Uri.encodeComponent(kind)}');
+    final rows = data is List ? data : const <dynamic>[];
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map((row) => (row['Транспорт'] ?? '').toString().trim())
+        .where((name) => name.isNotEmpty)
+        .toList();
+  }
+
+  /// POST /transport — назначить ТС заявке (пока заявка «Готова к
+  /// выполнению»; повторный вызов перевыбирает ТС).
+  Future<void> assignTransport(String num, String vehicle) async {
+    await _postJson('/transport', {'num': num, 'vehicle': vehicle});
+  }
+
   /// GET /requests/checkphoto/{num} — есть ли уже фото у заявки.
   /// Возвращает {"data": {"num": "…", "hasPhoto": true|false}}.
   /// Ошибка сети/сервера пробрасывается вызывающему коду.

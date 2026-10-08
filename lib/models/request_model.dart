@@ -95,6 +95,7 @@ class TransportRequest {
     required this.status,
     required this.subdivision,
     required this.transport,
+    required this.vehicleKind,
     required this.requiresPhoto,
     required this.requiresMaster,
     required this.operations,
@@ -117,6 +118,7 @@ class TransportRequest {
         status: _string(json['Статус']),
         subdivision: _string(json['Подразделение']),
         transport: _string(json['Транспорт']),
+        vehicleKind: _string(json['ВидТранспорта']),
         requiresPhoto: _bool(json['ТребуетсяФото']),
         requiresMaster: _bool(json['ТребуетсяМастер']),
         operations: _operations(json['Операции']),
@@ -146,6 +148,28 @@ class TransportRequest {
   /// «Транспорт» — транспортное средство (например, «2515нв53»).
   /// Приходит в списке заявок; пустая строка — не назначен.
   final String transport;
+
+  /// «ВидТранспорта» — требуемый вид ТС («Рохля», «Каток»…).
+  /// Приходит в списке заявок; по нему открывается выбор конкретного ТС.
+  final String vehicleKind;
+
+  /// Слитная форма вида ТС: «Вилочный погрузчик» → «ВилочныйПогрузчик».
+  /// Используется для отображения и запроса списка ТС по виду.
+  String get vehicleKindJoined {
+    final words =
+        vehicleKind.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    var result = '';
+    var first = true;
+    for (final word in words) {
+      if (first) {
+        result = word;
+        first = false;
+      } else {
+        result += word[0].toUpperCase() + word.substring(1);
+      }
+    }
+    return result;
+  }
 
   /// «ТребуетсяФото».
   final bool requiresPhoto;
@@ -198,6 +222,9 @@ class TransportRequest {
 
   /// Заявка взята в работу исполнителем (доступно «Выполнено»).
   bool get isInWork => status == 'В работе';
+
+  /// Готова к выполнению — можно выбрать ТС и взять в работу.
+  bool get isReadyForExecution => status == 'Готова к выполнению';
 
   /// Выполнена исполнителем, ждёт подтверждения мастера.
   bool get isWaitingMaster => status == 'Ожидает подтверждения мастера';

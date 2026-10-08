@@ -1,8 +1,8 @@
 {
-    "versionName":  "1.0.18",
-    "versionCode":  19,
-    "apkPath":  "releases/perevozka-1.0.18-19.apk",
-    "sha256":  "7893fc223cbaea9702f7e22824e3336e03826f0ad2301b7d2359a5279c19fb76",
-    "releaseNotes":  "Дата заявки в списке - тем же шрифтом и размером, что и номер заявки",
+    "versionName":  "1.0.24",
+    "versionCode":  25,
+    "apkPath":  "releases/perevozka-1.0.24-25.apk",
+    "sha256":  "972c42e863b100944ad9780f7ee690a4b6a8dbfccc8087ca414f5c049f2f4531",
+    "releaseNotes":  "Обновление приложения проверяется и при обновлении списка (потянуть вниз). Вид ТС отображается с пробелами, в запрос отправляется слитно",
     "required":  false
 }

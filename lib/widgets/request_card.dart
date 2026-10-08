@@ -11,7 +11,8 @@ import 'status_badge.dart';
 ///
 /// Шапка карточки: бейдж статуса и индикаторы требований (📷 требуется фото,
 /// 👤 нужен мастер, ⚠ особые условия) справа от него; ниже — номер заявки
-/// с датой, сводка операций и транспорт.
+/// с датой, сводка операций и транспорт. У заявки «Готова к выполнению»
+/// строка транспорта — кнопка выбора ТС ([onTransportTap]).
 ///
 /// [isCurrentTask] — заявка «В работе» у вошедшего пользователя: поднимается
 /// в начало списка и помечается чипом «★ ТЕКУЩАЯ ЗАДАЧА».
@@ -21,11 +22,13 @@ class RequestCard extends StatelessWidget {
     required this.request,
     required this.onTap,
     this.isCurrentTask = false,
+    this.onTransportTap,
   });
 
   final TransportRequest request;
   final VoidCallback onTap;
   final bool isCurrentTask;
+  final VoidCallback? onTransportTap;
 
   @override
   Widget build(BuildContext context) {
@@ -108,10 +111,42 @@ class RequestCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 6),
-              Text(
-                '🚛 Транспорт: ${request.transport.isEmpty ? 'не указан' : request.transport}',
-                style: theme.textTheme.bodyLarge,
-              ),
+              if (request.isReadyForExecution && onTransportTap != null)
+                // Заявка готова к выполнению — выбор/перевыбор ТС по тапу.
+                InkWell(
+                  onTap: onTransportTap,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            request.transport.isEmpty
+                                ? (request.vehicleKind.isEmpty
+                                    ? '🚛 Выберите транспорт'
+                                    : '🚛 ${request.vehicleKind}: выберите ТС')
+                                : '🚛 ${request.transport}',
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Icon(Icons.arrow_drop_down,
+                            color: theme.colorScheme.primary),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  '🚛 Транспорт: ${request.transport.isEmpty ? 'не указан' : request.transport}',
+                  style: theme.textTheme.bodyLarge,
+                ),
               if (request.subdivision.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text('🏢 ${request.subdivision}',
