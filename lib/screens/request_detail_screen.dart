@@ -240,6 +240,13 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
               ),
             ),
             if (request != null) ...[
+              const SizedBox(width: 10),
+              Text(
+                formatDate(request.date),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
               const SizedBox(width: 12),
               Flexible(child: StatusBadge(status: request.status)),
             ],
@@ -277,33 +284,57 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
           ),
         ),
-        _SectionCard(
-          title: 'Операции',
-          child: request.operations.isEmpty
-              ? Text(
-                  'В заявке нет операций',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var i = 0; i < request.operations.length; i++) ...[
-                      if (i > 0) const Divider(height: 32),
-                      _OperationView(
-                        operation: request.operations[i],
-                        // Номер строки из 1С, с fallback на порядковый.
-                        number: request.operations.length > 1
-                            ? (request.operations[i].lineNumber > 0
-                                ? request.operations[i].lineNumber
-                                : i + 1)
-                            : null,
-                      ),
-                    ],
-                  ],
+        if (request.isArbitrary)
+          // Произвольная заявка: груз задан свободным наименованием —
+          // номенклатура, ККМ, маршрут и документы ПЗ не показываем.
+          _SectionCard(
+            title: 'Груз',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Field(
+                  label: 'Наименование груза',
+                  value: request.cargoName.isNotEmpty
+                      ? request.cargoName
+                      : request.operations
+                          .map((op) => op.cargoName)
+                          .firstWhere((name) => name.isNotEmpty,
+                              orElse: () => '—'),
+                  emphasized: true,
                 ),
-        ),
+                _Field(label: 'Количество', value: '${request.totalQuantity} шт'),
+              ],
+            ),
+          )
+        else ...[
+          _SectionCard(
+            title: 'Операции',
+            child: request.operations.isEmpty
+                ? Text(
+                    'В заявке нет операций',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var i = 0; i < request.operations.length; i++) ...[
+                        if (i > 0) const Divider(height: 32),
+                        _OperationView(
+                          operation: request.operations[i],
+                          // Номер строки из 1С, с fallback на порядковый.
+                          number: request.operations.length > 1
+                              ? (request.operations[i].lineNumber > 0
+                                  ? request.operations[i].lineNumber
+                                  : i + 1)
+                              : null,
+                        ),
+                      ],
+                    ],
+                  ),
+          ),
+        ],
         if (request.specialConditions != null)
           _SectionCard(
             title: 'Условия',

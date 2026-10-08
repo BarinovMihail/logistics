@@ -31,6 +31,7 @@ class RequestOperation {
     required this.quantity,
     required this.from,
     required this.to,
+    this.cargoName = '',
   });
 
   factory RequestOperation.fromJson(Map<String, dynamic> json) =>
@@ -46,6 +47,7 @@ class RequestOperation {
         quantity: _int(json['Количество']),
         from: _string(json['Откуда']),
         to: _string(json['Куда']),
+        cargoName: _string(json['НаименованиеГруза']),
       );
 
   /// «НомерСтроки» — номер строки в заявке.
@@ -82,6 +84,10 @@ class RequestOperation {
   /// «Куда» — место выгрузки.
   final String to;
 
+  /// «НаименованиеГруза» — для произвольных заявок (без номенклатуры
+  /// из ПЗ): свободное название груза. Пустая строка — обычная операция.
+  final String cargoName;
+
   /// «Откуда» для отображения: пустое значение показываем как «—».
   String get fromDisplay => from.isEmpty ? '—' : from;
 
@@ -99,6 +105,7 @@ class TransportRequest {
     required this.requiresPhoto,
     required this.requiresMaster,
     required this.operations,
+    this.cargoName = '',
     this.date,
     this.quantity,
     this.declaredOperationsCount,
@@ -122,6 +129,7 @@ class TransportRequest {
         requiresPhoto: _bool(json['ТребуетсяФото']),
         requiresMaster: _bool(json['ТребуетсяМастер']),
         operations: _operations(json['Операции']),
+        cargoName: _string(json['НаименованиеГруза']),
         quantity: _optionalInt(json['Количество']),
         declaredOperationsCount: _optionalInt(json['Операций']),
         specialConditions: _conditionsText(json['ОсобыеУсловия']),
@@ -207,6 +215,16 @@ class TransportRequest {
 
   /// «ДатаВыполнения» — заполняется только в карточке заявки.
   final DateTime? completedAt;
+
+  /// «НаименованиеГруза» — свободное название груза произвольной заявки
+  /// (в списке — поле заявки, в карточке — внутри операций).
+  final String cargoName;
+
+  /// Произвольная заявка: груз задан свободным наименованием, без
+  /// номенклатуры/ККМ/маршрута из производственных заданий.
+  bool get isArbitrary =>
+      cargoName.isNotEmpty ||
+      operations.any((operation) => operation.cargoName.isNotEmpty);
 
   /// Первая операция или null (в списке операций нет).
   RequestOperation? get firstOperation =>

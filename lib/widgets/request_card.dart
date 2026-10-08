@@ -76,6 +76,23 @@ class RequestCard extends StatelessWidget {
                       ),
                     ),
                   StatusBadge(status: request.status),
+                  if (request.isArbitrary)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6A1B9A), // фиолетовый — произвольная
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'ПРОИЗВОЛЬНАЯ',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   if (request.requiresPhoto) _indicator(theme, '📷'),
                   if (request.requiresMaster) _indicator(theme, '👤'),
                   if (request.hasSpecialConditions) _indicator(theme, '⚠'),
